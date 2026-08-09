@@ -78,6 +78,10 @@ let albums = defaultAlbums;
 let currentAlbumIndex = 0;
 let tracks = albums[currentAlbumIndex].tracks;
 
+// Filled with the deployed statistics service URL after publication.
+const ANALYTICS_ENDPOINT = "";
+const COUNTED_PLAYS_KEY = "gma13-counted-plays";
+
 const audio = document.querySelector("#audio");
 const trackList = document.querySelector("#trackList");
 const albumSwitcher = document.querySelector("#albumSwitcher");
@@ -120,6 +124,7 @@ const trackCount = document.querySelector("#trackCount");
 const trackCountLabel = document.querySelector("#trackCountLabel");
 
 let currentIndex = 0;
+let loadedAlbumIndex = -1;
 let loadedIndex = -1;
 let previousVolume = 0.8;
 let shuffleTrackEnabled = false;
@@ -132,8 +137,83 @@ let albumShufflePosition = 0;
 let artworkPreviousFocus = null;
 let likedTracks = {};
 let excludedTracks = {};
+let countedPlays = restoreCountedPlays();
+let analyticsTrackKey = "";
+let listenedMilliseconds = 0;
+let listeningClockStartedAt = null;
+let analyticsRequestInFlight = false;
 
 audio.volume = Number(volume.value);
+
+function restoreCountedPlays() {
+  try {
+    return new Set(JSON.parse(sessionStorage.getItem(COUNTED_PLAYS_KEY) || "[]"));
+  } catch {
+    return new Set();
+  }
+}
+
+function persistCountedPlays() {
+  try {
+    sessionStorage.setItem(COUNTED_PLAYS_KEY, JSON.stringify([...countedPlays]));
+  } catch {
+    // Статистика продолжит работать до закрытия страницы.
+  }
+}
+
+function currentAnalyticsTrackKey() {
+  const album = albums[loadedAlbumIndex];
+  const track = album?.tracks[loadedIndex];
+  return album && track ? `${album.id}:${track.src}` : "";
+}
+
+function resetListeningAnalytics() {
+  analyticsTrackKey = currentAnalyticsTrackKey();
+  listenedMilliseconds = 0;
+  listeningClockStartedAt = null;
+  analyticsRequestInFlight = false;
+}
+
+function updateListeningClock() {
+  if (listeningClockStartedAt === null) return;
+  const now = performance.now();
+  listenedMilliseconds += Math.max(0, now - listeningClockStartedAt);
+  listeningClockStartedAt = now;
+}
+
+async function reportQualifiedPlay() {
+  if (!ANALYTICS_ENDPOINT || analyticsRequestInFlight || !analyticsTrackKey || countedPlays.has(analyticsTrackKey)) return;
+
+  const album = albums[loadedAlbumIndex];
+  const track = album?.tracks[loadedIndex];
+  if (!album || !track) return;
+  const expectedKey = `${album.id}:${track.src}`;
+  if (expectedKey !== analyticsTrackKey) return;
+
+  const trackDuration = Number.isFinite(audio.duration) ? audio.duration : Number(track.duration || 0);
+  const qualifyingSeconds = Math.min(30, trackDuration * 0.5);
+  if (qualifyingSeconds <= 0 || listenedMilliseconds < qualifyingSeconds * 1000) return;
+
+  analyticsRequestInFlight = true;
+  try {
+    const response = await fetch(`${ANALYTICS_ENDPOINT}/api/plays`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        albumId: album.id,
+        albumTitle: [album.title, album.subtitle].filter(Boolean).join(" · "),
+        trackTitle: track.title,
+        trackSrc: track.src,
+      }),
+      keepalive: true,
+    });
+    if (!response.ok) throw new Error(`Analytics ${response.status}`);
+    countedPlays.add(analyticsTrackKey);
+    persistCountedPlays();
+  } catch {
+    analyticsRequestInFlight = false;
+  }
+}
 
 function formatTime(seconds) {
   if (!Number.isFinite(seconds)) return "";
@@ -163,16 +243,18 @@ function persistLikes() {
   }
 }
 
-function isLiked(index) {
-  return Boolean(likedTracks[tracks[index].src]);
+function isLiked(index, albumIndex = currentAlbumIndex) {
+  return Boolean(likedTracks[albums[albumIndex].tracks[index].src]);
 }
 
-function updateLikeButton(button, index) {
+function updateLikeButton(button, index, albumIndex = currentAlbumIndex) {
   if (!button) return;
-  const liked = isLiked(index);
+  const track = albums[albumIndex]?.tracks[index];
+  if (!track) return;
+  const liked = isLiked(index, albumIndex);
   button.classList.toggle("is-liked", liked);
   button.setAttribute("aria-pressed", String(liked));
-  button.setAttribute("aria-label", `${liked ? "Снять лайк с" : "Поставить лайк"} ${tracks[index].title}`);
+  button.setAttribute("aria-label", `${liked ? "Снять лайк с" : "Поставить лайк"} ${track.title}`);
   button.title = liked ? "Снять лайк" : "Лайк";
   const count = button.querySelector(".like-count");
   if (count) count.textContent = liked ? "1" : "0";
@@ -182,11 +264,11 @@ function updateLikes() {
   document.querySelectorAll("[data-like-index]").forEach((button) => {
     updateLikeButton(button, Number(button.dataset.likeIndex));
   });
-  updateLikeButton(playerLike, currentIndex);
+  if (loadedAlbumIndex >= 0 && loadedIndex >= 0) updateLikeButton(playerLike, loadedIndex, loadedAlbumIndex);
 }
 
-function toggleLike(index) {
-  const key = tracks[index].src;
+function toggleLike(index, albumIndex = currentAlbumIndex) {
+  const key = albums[albumIndex].tracks[index].src;
   if (likedTracks[key]) delete likedTracks[key];
   else likedTracks[key] = true;
   persistLikes();
@@ -234,7 +316,7 @@ function updateExcludedTracks() {
 function toggleExcluded(index) {
   const key = tracks[index].src;
   const excluding = !excludedTracks[key];
-  const wasCurrent = index === currentIndex && loadedIndex === index;
+  const wasCurrent = currentAlbumIndex === loadedAlbumIndex && index === loadedIndex;
   const wasPlaying = wasCurrent && !audio.paused;
 
   if (excluding) excludedTracks[key] = true;
@@ -250,6 +332,7 @@ function toggleExcluded(index) {
   audio.pause();
   audio.removeAttribute("src");
   audio.load();
+  loadedAlbumIndex = -1;
   loadedIndex = -1;
   const target = adjacentTrack(1);
   if (target !== null) loadTrack(target, wasPlaying);
@@ -409,30 +492,24 @@ function updateAlbumView() {
 }
 
 function setAlbum(index, autoplay = false, trackIndex = 0) {
-  if (index === currentAlbumIndex || !albums[index]) return;
-  audio.pause();
-  audio.removeAttribute("src");
-  audio.load();
-  currentAlbumIndex = index;
-  tracks = albums[currentAlbumIndex].tracks;
-  currentIndex = Math.max(0, Math.min(trackIndex, tracks.length - 1));
-  if (isExcluded(currentIndex)) {
-    const available = playableIndexes();
-    currentIndex = available[0] ?? currentIndex;
+  if (!albums[index]) return;
+  if (index !== currentAlbumIndex) {
+    currentAlbumIndex = index;
+    tracks = albums[currentAlbumIndex].tracks;
+    currentIndex = Math.max(0, Math.min(trackIndex, tracks.length - 1));
+    if (isExcluded(currentIndex)) {
+      const available = playableIndexes();
+      currentIndex = available[0] ?? currentIndex;
+    }
+    shuffleOrder = [];
+    shufflePosition = 0;
+    if (shuffleTrackEnabled) resetShuffle(currentIndex);
+    if (shuffleAlbumEnabled) resetAlbumShuffle(currentAlbumIndex);
+    updateAlbumView();
+    renderTracks();
+    discoverDurations();
   }
-  loadedIndex = -1;
-  shuffleOrder = [];
-  shufflePosition = 0;
-  if (shuffleTrackEnabled) resetShuffle(currentIndex);
-  if (shuffleAlbumEnabled) resetAlbumShuffle(currentAlbumIndex);
-  progress.value = 0;
-  setRangeFill(progress, 0);
-  currentTime.textContent = "0:00";
-  duration.textContent = "0:00";
-  updateAlbumView();
-  renderTracks();
-  loadTrack(currentIndex, autoplay);
-  discoverDurations();
+  if (autoplay) loadTrack(currentIndex, true);
   updateState();
 }
 
@@ -475,7 +552,7 @@ function renderTracks() {
       if (!row) return;
       const index = Number(row.dataset.index);
       if (isExcluded(index)) return;
-      if (index === currentIndex && loadedIndex === index && !audio.paused) {
+      if (currentAlbumIndex === loadedAlbumIndex && index === loadedIndex && !audio.paused) {
         audio.pause();
       } else {
         if (shuffleTrackEnabled) resetShuffle(index);
@@ -498,7 +575,7 @@ function renderTracks() {
 }
 function updateRows() {
   document.querySelectorAll(".track-row").forEach((row, index) => {
-    const active = index === currentIndex;
+    const active = currentAlbumIndex === loadedAlbumIndex && index === loadedIndex;
     const excluded = isExcluded(index);
     row.classList.toggle("active", active);
     row.querySelector(".row-play").textContent = excluded ? "−" : active ? icon(!audio.paused) : "▶";
@@ -508,9 +585,9 @@ function updateRows() {
   });
 }
 
-function updateMediaSession(track) {
+function updateMediaSession(track, albumIndex = loadedAlbumIndex) {
   if (!("mediaSession" in navigator)) return;
-  const album = albums[currentAlbumIndex];
+  const album = albums[albumIndex];
   navigator.mediaSession.metadata = new MediaMetadata({
     title: track.title,
     artist: album.artist,
@@ -519,15 +596,19 @@ function updateMediaSession(track) {
   });
 }
 
-function updateArtwork(track) {
-  setImageSource(artworkImage, trackCover(track), albums[currentAlbumIndex].cover);
+function updateArtwork(track, albumIndex = loadedAlbumIndex) {
+  const album = albums[albumIndex];
+  setImageSource(artworkImage, trackCover(track, album), album.cover);
   artworkImage.alt = `Иллюстрация трека ${track.title}`;
   artworkTitle.textContent = track.title;
-  artworkSubtitle.textContent = [albums[currentAlbumIndex].artist, track.element].filter(Boolean).join(" · ");
+  artworkSubtitle.textContent = [album.artist, track.element].filter(Boolean).join(" · ");
 }
 
 function showArtwork(force = false) {
-  updateArtwork(tracks[currentIndex]);
+  const album = albums[loadedAlbumIndex];
+  const track = album?.tracks[loadedIndex];
+  if (!album || !track) return;
+  updateArtwork(track, loadedAlbumIndex);
   artworkPreviousFocus = document.activeElement;
   artworkModal.hidden = false;
   document.body.classList.add("artwork-open");
@@ -546,18 +627,20 @@ function loadTrack(index, autoplay = false) {
   if (isExcluded(currentIndex)) return false;
   const track = tracks[currentIndex];
 
-  if (loadedIndex !== currentIndex) {
+  if (loadedAlbumIndex !== currentAlbumIndex || loadedIndex !== currentIndex) {
+    loadedAlbumIndex = currentAlbumIndex;
     loadedIndex = currentIndex;
+    resetListeningAnalytics();
     audio.src = track.src;
-    setImageSource(playerCover, trackThumb(track), albums[currentAlbumIndex].cover);
+    setImageSource(playerCover, trackThumb(track, albums[loadedAlbumIndex]), albums[loadedAlbumIndex].cover);
     playerTitle.textContent = track.title;
-    playerSubtitle.textContent = [albums[currentAlbumIndex].artist, track.element].filter(Boolean).join(" · ");
-    updateArtwork(track);
+    playerSubtitle.textContent = [albums[loadedAlbumIndex].artist, track.element].filter(Boolean).join(" · ");
+    updateArtwork(track, loadedAlbumIndex);
     progress.value = 0;
     progress.style.setProperty("--value", "0%");
     currentTime.textContent = "0:00";
     duration.textContent = "0:00";
-    updateMediaSession(track);
+    updateMediaSession(track, loadedAlbumIndex);
   }
 
   updateRows();
@@ -568,11 +651,12 @@ function loadTrack(index, autoplay = false) {
 
 function updateState() {
   const playing = !audio.paused;
+  const viewedAlbumIsPlaying = playing && currentAlbumIndex === loadedAlbumIndex;
   playPause.classList.toggle("is-playing", playing);
   playPause.setAttribute("aria-label", playing ? "Пауза" : "Воспроизвести");
   playPause.title = playing ? "Пауза" : "Воспроизвести";
-  playAlbum.querySelector(".button-icon").textContent = icon(playing);
-  playAlbum.querySelector("span:last-child").textContent = playing ? "Пауза" : "Слушать альбом";
+  playAlbum.querySelector(".button-icon").textContent = icon(viewedAlbumIsPlaying);
+  playAlbum.querySelector("span:last-child").textContent = viewedAlbumIsPlaying ? "Пауза" : "Слушать альбом";
   if ("mediaSession" in navigator) navigator.mediaSession.playbackState = playing ? "playing" : "paused";
   updateRows();
 }
@@ -585,6 +669,33 @@ function togglePlayback() {
   }
   else if (audio.paused) audio.play();
   else audio.pause();
+}
+
+function toggleAlbumPlayback() {
+  if (loadedAlbumIndex === currentAlbumIndex && loadedIndex >= 0) {
+    if (audio.paused) audio.play();
+    else audio.pause();
+    return;
+  }
+  const index = isExcluded(currentIndex) ? playableIndexes()[0] : currentIndex;
+  if (index !== undefined) loadTrack(index, true);
+}
+
+function focusLoadedAlbum() {
+  if (loadedAlbumIndex < 0 || loadedIndex < 0 || !albums[loadedAlbumIndex]) return false;
+  if (currentAlbumIndex !== loadedAlbumIndex) {
+    currentAlbumIndex = loadedAlbumIndex;
+    tracks = albums[currentAlbumIndex].tracks;
+    currentIndex = loadedIndex;
+    if (shuffleTrackEnabled) resetShuffle(currentIndex);
+    if (shuffleAlbumEnabled) resetAlbumShuffle(currentAlbumIndex);
+    updateAlbumView();
+    renderTracks();
+    discoverDurations();
+  } else {
+    currentIndex = loadedIndex;
+  }
+  return true;
 }
 
 function adjacentTrack(direction) {
@@ -645,6 +756,7 @@ function changeAlbum(direction, autoplay = true) {
 }
 
 function changeTrack(direction) {
+  focusLoadedAlbum();
   const target = adjacentTrack(direction);
   if (target !== null) {
     loadTrack(target, true);
@@ -667,6 +779,7 @@ function handleTrackEnd() {
     audio.play();
     return;
   }
+  focusLoadedAlbum();
   const target = adjacentTrack(1);
   if (target === null) {
     changeAlbum(1, true);
@@ -691,11 +804,11 @@ function discoverDurations() {
 }
 
 playPause.addEventListener("click", togglePlayback);
-playAlbum.addEventListener("click", togglePlayback);
+playAlbum.addEventListener("click", toggleAlbumPlayback);
 previous.addEventListener("click", playPrevious);
 next.addEventListener("click", () => changeTrack(1));
-previousAlbum.addEventListener("click", () => changeAlbum(-1, true));
-nextAlbum.addEventListener("click", () => changeAlbum(1, true));
+previousAlbum.addEventListener("click", () => { focusLoadedAlbum(); changeAlbum(-1, true); });
+nextAlbum.addEventListener("click", () => { focusLoadedAlbum(); changeAlbum(1, true); });
 shuffleTrack.addEventListener("click", () => {
   shuffleTrackEnabled = !shuffleTrackEnabled;
   if (shuffleTrackEnabled) resetShuffle(currentIndex);
@@ -710,7 +823,9 @@ repeatOne.addEventListener("click", () => {
   repeatOneEnabled = !repeatOneEnabled;
   updateModes();
 });
-playerLike.addEventListener("click", () => toggleLike(currentIndex));
+playerLike.addEventListener("click", () => {
+  if (loadedAlbumIndex >= 0 && loadedIndex >= 0) toggleLike(loadedIndex, loadedAlbumIndex);
+});
 
 openArtworkButton.addEventListener("click", () => showArtwork(true));
 closeArtworkButton.addEventListener("click", hideArtwork);
@@ -719,12 +834,20 @@ artworkModal.addEventListener("click", (event) => {
 });
 
 audio.addEventListener("play", () => {
+  listeningClockStartedAt = performance.now();
   updateState();
 });
-audio.addEventListener("pause", updateState);
+audio.addEventListener("pause", () => {
+  updateListeningClock();
+  listeningClockStartedAt = null;
+  reportQualifiedPlay();
+  updateState();
+});
 audio.addEventListener("ended", handleTrackEnd);
 audio.addEventListener("loadedmetadata", () => duration.textContent = formatTime(audio.duration));
 audio.addEventListener("timeupdate", () => {
+  updateListeningClock();
+  reportQualifiedPlay();
   currentTime.textContent = formatTime(audio.currentTime);
   const percent = audio.duration ? (audio.currentTime / audio.duration) * 100 : 0;
   progress.value = percent;
@@ -818,6 +941,11 @@ async function loadAlbumsData() {
 
 async function startPlayer() {
   await loadAlbumsData();
+  currentAlbumIndex = Math.floor(Math.random() * albums.length);
+  tracks = albums[currentAlbumIndex].tracks;
+  currentIndex = 0;
+  loadedAlbumIndex = -1;
+  loadedIndex = -1;
   restoreLikes();
   restoreExcludedTracks();
   renderAlbumSwitcher();
