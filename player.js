@@ -133,6 +133,7 @@ let shuffleOrder = [];
 let shufflePosition = 0;
 let albumShuffleOrder = [];
 let albumShufflePosition = 0;
+let albumTrackShuffleBag = [];
 let artworkPreviousFocus = null;
 let likedTracks = {};
 let excludedTracks = {};
@@ -343,7 +344,8 @@ function toggleExcluded(index) {
   renderTracks();
   discoverDurations();
   updateRows();
-  queueUpcomingTrack();
+  if (shuffleAlbumEnabled) resetAlbumTrackShuffle();
+  queueUpcomingTrack(true);
 
   if (!excluding || !wasCurrent) return;
   audio.pause();
@@ -385,6 +387,28 @@ function resetAlbumShuffle(startIndex = currentAlbumIndex) {
   albumShufflePosition = 0;
 }
 
+function resetAlbumTrackShuffle() {
+  albumTrackShuffleBag = albums.flatMap((album, albumIndex) =>
+    playableIndexes(albumIndex)
+      .filter((trackIndex) => albumIndex !== loadedAlbumIndex || trackIndex !== loadedIndex)
+      .map((trackIndex) => ({ albumIndex, trackIndex })));
+  for (let i = albumTrackShuffleBag.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [albumTrackShuffleBag[i], albumTrackShuffleBag[j]] = [albumTrackShuffleBag[j], albumTrackShuffleBag[i]];
+  }
+}
+
+function takeRandomAlbumTrack(fromAlbumIndex) {
+  if (!albumTrackShuffleBag.length) resetAlbumTrackShuffle();
+  let targetIndex = albumTrackShuffleBag.findIndex((target) => target.albumIndex !== fromAlbumIndex);
+  if (targetIndex < 0) {
+    resetAlbumTrackShuffle();
+    targetIndex = albumTrackShuffleBag.findIndex((target) => target.albumIndex !== fromAlbumIndex);
+  }
+  if (targetIndex < 0) return null;
+  return albumTrackShuffleBag.splice(targetIndex, 1)[0];
+}
+
 function persistModes() {
   try {
     localStorage.setItem("gma13-player-modes", JSON.stringify({
@@ -420,7 +444,11 @@ function restoreModes() {
     localStorage.removeItem("gma13-player-modes");
   }
   if (shuffleTrackEnabled) resetShuffle(currentIndex);
-  if (shuffleAlbumEnabled) resetAlbumShuffle(currentAlbumIndex);
+  if (shuffleAlbumEnabled) {
+    resetAlbumShuffle(currentAlbumIndex);
+    resetAlbumTrackShuffle();
+  }
+  queueUpcomingTrack(true);
   updateModes();
 }
 
@@ -640,10 +668,9 @@ function hideArtwork() {
 }
 
 function nextAlbumTrack(fromAlbumIndex, randomAlbum = false) {
-  const albumIndexes = randomAlbum
-    ? shuffledAlbumIndexes(fromAlbumIndex).slice(1)
-    : Array.from({ length: albums.length - 1 }, (_, offset) =>
-      (fromAlbumIndex + offset + 1) % albums.length);
+  if (randomAlbum) return takeRandomAlbumTrack(fromAlbumIndex);
+  const albumIndexes = Array.from({ length: albums.length - 1 }, (_, offset) =>
+    (fromAlbumIndex + offset + 1) % albums.length);
 
   for (const albumIndex of albumIndexes) {
     const available = playableIndexes(albumIndex);
@@ -690,8 +717,9 @@ function warmUpcomingTrack(target) {
   }
 }
 
-function queueUpcomingTrack() {
-  queuedNextTrack = planNextTrack();
+function queueUpcomingTrack(force = false) {
+  if (force) queuedNextTrack = null;
+  if (!queuedNextTrack) queuedNextTrack = planNextTrack();
   warmUpcomingTrack(queuedNextTrack);
 }
 
@@ -902,18 +930,23 @@ nextAlbum.addEventListener("click", () => { focusLoadedAlbum(); changeAlbum(1, t
 shuffleTrack.addEventListener("click", () => {
   shuffleTrackEnabled = !shuffleTrackEnabled;
   if (shuffleTrackEnabled) resetShuffle(currentIndex);
-  queueUpcomingTrack();
+  queueUpcomingTrack(true);
   updateModes();
 });
 shuffleAlbum.addEventListener("click", () => {
   shuffleAlbumEnabled = !shuffleAlbumEnabled;
-  if (shuffleAlbumEnabled) resetAlbumShuffle(currentAlbumIndex);
-  queueUpcomingTrack();
+  if (shuffleAlbumEnabled) {
+    resetAlbumShuffle(currentAlbumIndex);
+    resetAlbumTrackShuffle();
+  } else {
+    albumTrackShuffleBag = [];
+  }
+  queueUpcomingTrack(true);
   updateModes();
 });
 repeatOne.addEventListener("click", () => {
   repeatOneEnabled = !repeatOneEnabled;
-  queueUpcomingTrack();
+  queueUpcomingTrack(true);
   updateModes();
 });
 playerLike.addEventListener("click", () => {
