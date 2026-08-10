@@ -230,14 +230,20 @@ async function sendListeningProgress(force = false) {
       }),
       keepalive: true,
     });
-    if (!response.ok) throw new Error(`Analytics ${response.status}`);
     const result = await response.json();
+    if (response.status === 409 && Number.isInteger(result.sequence)) {
+      analyticsSequence = result.sequence;
+      analyticsLastHeartbeatAt = now;
+      return;
+    }
+    if (!response.ok) throw new Error(`Analytics ${response.status}`);
     if (generation !== analyticsGeneration) return;
-    analyticsSequence = nextSequence;
+    analyticsSequence = Number.isInteger(result.sequence) ? result.sequence : nextSequence;
     analyticsLastHeartbeatAt = now;
     analyticsCounted = Boolean(result.counted);
   } catch {
     // Следующая отметка повторит тот же номер и не создаст двойной счёт.
+    analyticsLastHeartbeatAt = now;
   } finally {
     if (generation === analyticsGeneration) analyticsRequestInFlight = false;
   }
