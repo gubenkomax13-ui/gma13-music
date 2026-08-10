@@ -144,9 +144,13 @@ let analyticsCounted = false;
 let analyticsRequestInFlight = false;
 let analyticsLastAttemptAt = 0;
 let analyticsGeneration = 0;
+let queuedNextTrack = null;
+const nextTrackPreloader = new Audio();
+const prefetchedTrackUrls = new Set();
 const analyticsClientId = restoreAnalyticsClientId();
 
 audio.volume = Number(volume.value);
+nextTrackPreloader.preload = "auto";
 
 function restoreAnalyticsClientId() {
   try {
@@ -339,6 +343,7 @@ function toggleExcluded(index) {
   renderTracks();
   discoverDurations();
   updateRows();
+  queueUpcomingTrack();
 
   if (!excluding || !wasCurrent) return;
   audio.pause();
@@ -634,6 +639,75 @@ function hideArtwork() {
   if (artworkPreviousFocus instanceof HTMLElement) artworkPreviousFocus.focus({ preventScroll: true });
 }
 
+function nextAlbumTrack(fromAlbumIndex, randomAlbum = false) {
+  const albumIndexes = randomAlbum
+    ? shuffledAlbumIndexes(fromAlbumIndex).slice(1)
+    : Array.from({ length: albums.length - 1 }, (_, offset) =>
+      (fromAlbumIndex + offset + 1) % albums.length);
+
+  for (const albumIndex of albumIndexes) {
+    const available = playableIndexes(albumIndex);
+    if (!available.length) continue;
+    const trackIndex = shuffleTrackEnabled
+      ? available[Math.floor(Math.random() * available.length)]
+      : available[0];
+    return { albumIndex, trackIndex };
+  }
+  return null;
+}
+
+function planNextTrack() {
+  if (loadedAlbumIndex < 0 || loadedIndex < 0) return null;
+  if (repeatOneEnabled) return { albumIndex: loadedAlbumIndex, trackIndex: loadedIndex };
+  if (shuffleAlbumEnabled) return nextAlbumTrack(loadedAlbumIndex, true);
+
+  const albumTracks = albums[loadedAlbumIndex].tracks;
+  if (shuffleTrackEnabled && loadedAlbumIndex === currentAlbumIndex) {
+    const position = shuffleOrder.indexOf(loadedIndex);
+    const target = position >= 0 ? shuffleOrder[position + 1] : undefined;
+    if (target !== undefined) return { albumIndex: loadedAlbumIndex, trackIndex: target };
+  } else {
+    for (let index = loadedIndex + 1; index < albumTracks.length; index += 1) {
+      if (!isExcluded(index, loadedAlbumIndex)) return { albumIndex: loadedAlbumIndex, trackIndex: index };
+    }
+  }
+
+  return nextAlbumTrack(loadedAlbumIndex);
+}
+
+function warmUpcomingTrack(target) {
+  if (!target) return;
+  const track = albums[target.albumIndex]?.tracks[target.trackIndex];
+  if (!track) return;
+  const url = new URL(track.src, location.href).href;
+  if (nextTrackPreloader.src !== url) {
+    nextTrackPreloader.src = url;
+    nextTrackPreloader.load();
+  }
+  if (!prefetchedTrackUrls.has(url)) {
+    prefetchedTrackUrls.add(url);
+    fetch(url, { cache: "force-cache" }).catch(() => prefetchedTrackUrls.delete(url));
+  }
+}
+
+function queueUpcomingTrack() {
+  queuedNextTrack = planNextTrack();
+  warmUpcomingTrack(queuedNextTrack);
+}
+
+function playQueuedTrack() {
+  const target = queuedNextTrack;
+  if (!target) return false;
+  queuedNextTrack = null;
+  if (target.albumIndex === currentAlbumIndex) {
+    if (shuffleTrackEnabled) shufflePosition = shuffleOrder.indexOf(target.trackIndex);
+    loadTrack(target.trackIndex, true);
+  } else {
+    setAlbum(target.albumIndex, true, target.trackIndex);
+  }
+  return true;
+}
+
 function loadTrack(index, autoplay = false) {
   currentIndex = (index + tracks.length) % tracks.length;
   if (isExcluded(currentIndex)) return false;
@@ -657,6 +731,7 @@ function loadTrack(index, autoplay = false) {
 
   updateRows();
   updateLikes();
+  queueUpcomingTrack();
   if (autoplay) audio.play().catch(() => updateState());
   return true;
 }
@@ -769,6 +844,7 @@ function changeAlbum(direction, autoplay = true) {
 
 function changeTrack(direction) {
   focusLoadedAlbum();
+  if (direction > 0 && playQueuedTrack()) return;
   const target = adjacentTrack(direction);
   if (target !== null) {
     loadTrack(target, true);
@@ -792,6 +868,7 @@ function handleTrackEnd() {
     audio.play();
     return;
   }
+  if (playQueuedTrack()) return;
   focusLoadedAlbum();
   const target = adjacentTrack(1);
   if (target === null) {
@@ -825,15 +902,18 @@ nextAlbum.addEventListener("click", () => { focusLoadedAlbum(); changeAlbum(1, t
 shuffleTrack.addEventListener("click", () => {
   shuffleTrackEnabled = !shuffleTrackEnabled;
   if (shuffleTrackEnabled) resetShuffle(currentIndex);
+  queueUpcomingTrack();
   updateModes();
 });
 shuffleAlbum.addEventListener("click", () => {
   shuffleAlbumEnabled = !shuffleAlbumEnabled;
   if (shuffleAlbumEnabled) resetAlbumShuffle(currentAlbumIndex);
+  queueUpcomingTrack();
   updateModes();
 });
 repeatOne.addEventListener("click", () => {
   repeatOneEnabled = !repeatOneEnabled;
+  queueUpcomingTrack();
   updateModes();
 });
 playerLike.addEventListener("click", () => {
