@@ -78,9 +78,8 @@ let albums = defaultAlbums;
 let currentAlbumIndex = 0;
 let tracks = albums[currentAlbumIndex].tracks;
 
-// Filled with the deployed statistics service URL after publication.
-const ANALYTICS_ENDPOINT = "";
-const COUNTED_PLAYS_KEY = "gma13-counted-plays";
+const ANALYTICS_ENDPOINT = "https://gma13-listening-stats.gubenkomax13.chatgpt.site";
+const ANALYTICS_CLIENT_KEY = "gma13-listener-id";
 
 const audio = document.querySelector("#audio");
 const trackList = document.querySelector("#trackList");
@@ -137,27 +136,26 @@ let albumShufflePosition = 0;
 let artworkPreviousFocus = null;
 let likedTracks = {};
 let excludedTracks = {};
-let countedPlays = restoreCountedPlays();
 let analyticsTrackKey = "";
-let listenedMilliseconds = 0;
-let listeningClockStartedAt = null;
+let analyticsSessionId = "";
+let analyticsSequence = 0;
+let analyticsLastHeartbeatAt = 0;
+let analyticsCounted = false;
 let analyticsRequestInFlight = false;
+let analyticsGeneration = 0;
+const analyticsClientId = restoreAnalyticsClientId();
 
 audio.volume = Number(volume.value);
 
-function restoreCountedPlays() {
+function restoreAnalyticsClientId() {
   try {
-    return new Set(JSON.parse(sessionStorage.getItem(COUNTED_PLAYS_KEY) || "[]"));
+    const saved = localStorage.getItem(ANALYTICS_CLIENT_KEY);
+    if (saved) return saved;
+    const created = crypto.randomUUID().replace(/-/g, "");
+    localStorage.setItem(ANALYTICS_CLIENT_KEY, created);
+    return created;
   } catch {
-    return new Set();
-  }
-}
-
-function persistCountedPlays() {
-  try {
-    sessionStorage.setItem(COUNTED_PLAYS_KEY, JSON.stringify([...countedPlays]));
-  } catch {
-    // Статистика продолжит работать до закрытия страницы.
+    return `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
   }
 }
 
@@ -168,50 +166,80 @@ function currentAnalyticsTrackKey() {
 }
 
 function resetListeningAnalytics() {
+  analyticsGeneration += 1;
   analyticsTrackKey = currentAnalyticsTrackKey();
-  listenedMilliseconds = 0;
-  listeningClockStartedAt = null;
+  analyticsSessionId = "";
+  analyticsSequence = 0;
+  analyticsLastHeartbeatAt = 0;
+  analyticsCounted = false;
   analyticsRequestInFlight = false;
 }
 
-function updateListeningClock() {
-  if (listeningClockStartedAt === null) return;
-  const now = performance.now();
-  listenedMilliseconds += Math.max(0, now - listeningClockStartedAt);
-  listeningClockStartedAt = now;
-}
-
-async function reportQualifiedPlay() {
-  if (!ANALYTICS_ENDPOINT || analyticsRequestInFlight || !analyticsTrackKey || countedPlays.has(analyticsTrackKey)) return;
-
+async function startListeningSession() {
+  if (!ANALYTICS_ENDPOINT || analyticsRequestInFlight || analyticsSessionId || analyticsCounted || !analyticsTrackKey) return;
   const album = albums[loadedAlbumIndex];
   const track = album?.tracks[loadedIndex];
   if (!album || !track) return;
   const expectedKey = `${album.id}:${track.src}`;
   if (expectedKey !== analyticsTrackKey) return;
 
-  const trackDuration = Number.isFinite(audio.duration) ? audio.duration : Number(track.duration || 0);
-  const qualifyingSeconds = Math.min(30, trackDuration * 0.5);
-  if (qualifyingSeconds <= 0 || listenedMilliseconds < qualifyingSeconds * 1000) return;
-
+  const generation = analyticsGeneration;
   analyticsRequestInFlight = true;
   try {
     const response = await fetch(`${ANALYTICS_ENDPOINT}/api/plays`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        action: "start",
         albumId: album.id,
-        albumTitle: [album.title, album.subtitle].filter(Boolean).join(" · "),
-        trackTitle: track.title,
         trackSrc: track.src,
+        clientId: analyticsClientId,
       }),
       keepalive: true,
     });
     if (!response.ok) throw new Error(`Analytics ${response.status}`);
-    countedPlays.add(analyticsTrackKey);
-    persistCountedPlays();
+    const result = await response.json();
+    if (generation !== analyticsGeneration || expectedKey !== currentAnalyticsTrackKey()) return;
+    analyticsSessionId = result.sessionId || "";
+    analyticsLastHeartbeatAt = performance.now();
   } catch {
-    analyticsRequestInFlight = false;
+    // Воспроизведение не должно зависеть от доступности статистики.
+  } finally {
+    if (generation === analyticsGeneration) analyticsRequestInFlight = false;
+  }
+}
+
+async function sendListeningProgress(force = false) {
+  if (!ANALYTICS_ENDPOINT || !analyticsSessionId || analyticsCounted || analyticsRequestInFlight) return;
+  const now = performance.now();
+  if (!force && now - analyticsLastHeartbeatAt < 9000) return;
+
+  const generation = analyticsGeneration;
+  const nextSequence = analyticsSequence + 1;
+  analyticsRequestInFlight = true;
+  try {
+    const response = await fetch(`${ANALYTICS_ENDPOINT}/api/plays`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "progress",
+        sessionId: analyticsSessionId,
+        clientId: analyticsClientId,
+        sequence: nextSequence,
+        position: Math.max(0, Math.floor(audio.currentTime)),
+      }),
+      keepalive: true,
+    });
+    if (!response.ok) throw new Error(`Analytics ${response.status}`);
+    const result = await response.json();
+    if (generation !== analyticsGeneration) return;
+    analyticsSequence = nextSequence;
+    analyticsLastHeartbeatAt = now;
+    analyticsCounted = Boolean(result.counted);
+  } catch {
+    // Следующая отметка повторит тот же номер и не создаст двойной счёт.
+  } finally {
+    if (generation === analyticsGeneration) analyticsRequestInFlight = false;
   }
 }
 
@@ -775,6 +803,7 @@ function playPrevious() {
 
 function handleTrackEnd() {
   if (repeatOneEnabled) {
+    resetListeningAnalytics();
     audio.currentTime = 0;
     audio.play();
     return;
@@ -834,20 +863,17 @@ artworkModal.addEventListener("click", (event) => {
 });
 
 audio.addEventListener("play", () => {
-  listeningClockStartedAt = performance.now();
+  startListeningSession();
   updateState();
 });
 audio.addEventListener("pause", () => {
-  updateListeningClock();
-  listeningClockStartedAt = null;
-  reportQualifiedPlay();
+  sendListeningProgress(true);
   updateState();
 });
 audio.addEventListener("ended", handleTrackEnd);
 audio.addEventListener("loadedmetadata", () => duration.textContent = formatTime(audio.duration));
 audio.addEventListener("timeupdate", () => {
-  updateListeningClock();
-  reportQualifiedPlay();
+  sendListeningProgress();
   currentTime.textContent = formatTime(audio.currentTime);
   const percent = audio.duration ? (audio.currentTime / audio.duration) * 100 : 0;
   progress.value = percent;
