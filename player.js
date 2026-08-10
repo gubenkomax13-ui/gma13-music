@@ -648,7 +648,7 @@ function nextAlbumTrack(fromAlbumIndex, randomAlbum = false) {
   for (const albumIndex of albumIndexes) {
     const available = playableIndexes(albumIndex);
     if (!available.length) continue;
-    const trackIndex = shuffleTrackEnabled
+    const trackIndex = randomAlbum || shuffleTrackEnabled
       ? available[Math.floor(Math.random() * available.length)]
       : available[0];
     return { albumIndex, trackIndex };
