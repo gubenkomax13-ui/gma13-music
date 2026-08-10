@@ -137,11 +137,12 @@ let artworkPreviousFocus = null;
 let likedTracks = {};
 let excludedTracks = {};
 let analyticsTrackKey = "";
-let analyticsSessionId = "";
-let analyticsSequence = 0;
-let analyticsLastHeartbeatAt = 0;
+let analyticsEventId = "";
+let listenedMilliseconds = 0;
+let listeningClockStartedAt = null;
 let analyticsCounted = false;
 let analyticsRequestInFlight = false;
+let analyticsLastAttemptAt = 0;
 let analyticsGeneration = 0;
 const analyticsClientId = restoreAnalyticsClientId();
 
@@ -155,7 +156,7 @@ function restoreAnalyticsClientId() {
     localStorage.setItem(ANALYTICS_CLIENT_KEY, created);
     return created;
   } catch {
-    return `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
+    return `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
   }
 }
 
@@ -168,20 +169,37 @@ function currentAnalyticsTrackKey() {
 function resetListeningAnalytics() {
   analyticsGeneration += 1;
   analyticsTrackKey = currentAnalyticsTrackKey();
-  analyticsSessionId = "";
-  analyticsSequence = 0;
-  analyticsLastHeartbeatAt = 0;
+  analyticsEventId = "";
+  listenedMilliseconds = 0;
+  listeningClockStartedAt = null;
   analyticsCounted = false;
   analyticsRequestInFlight = false;
+  analyticsLastAttemptAt = 0;
 }
 
-async function startListeningSession() {
-  if (!ANALYTICS_ENDPOINT || analyticsRequestInFlight || analyticsSessionId || analyticsCounted || !analyticsTrackKey) return;
+function updateListeningClock() {
+  if (listeningClockStartedAt === null) return;
+  const now = performance.now();
+  listenedMilliseconds += Math.max(0, now - listeningClockStartedAt);
+  listeningClockStartedAt = now;
+}
+
+async function reportQualifiedPlay() {
+  if (!ANALYTICS_ENDPOINT || analyticsCounted || analyticsRequestInFlight || !analyticsTrackKey) return;
   const album = albums[loadedAlbumIndex];
   const track = album?.tracks[loadedIndex];
   if (!album || !track) return;
   const expectedKey = `${album.id}:${track.src}`;
   if (expectedKey !== analyticsTrackKey) return;
+
+  const trackDuration = Number.isFinite(audio.duration) ? audio.duration : Number(track.duration || 0);
+  const qualifyingSeconds = Math.min(30, trackDuration * 0.5);
+  if (qualifyingSeconds <= 0 || listenedMilliseconds < qualifyingSeconds * 1000) return;
+
+  const now = performance.now();
+  if (now - analyticsLastAttemptAt < 10000) return;
+  analyticsLastAttemptAt = now;
+  if (!analyticsEventId) analyticsEventId = crypto.randomUUID().replace(/-/g, "");
 
   const generation = analyticsGeneration;
   analyticsRequestInFlight = true;
@@ -190,7 +208,8 @@ async function startListeningSession() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        action: "start",
+        action: "count",
+        eventId: analyticsEventId,
         albumId: album.id,
         trackSrc: track.src,
         clientId: analyticsClientId,
@@ -200,50 +219,9 @@ async function startListeningSession() {
     if (!response.ok) throw new Error(`Analytics ${response.status}`);
     const result = await response.json();
     if (generation !== analyticsGeneration || expectedKey !== currentAnalyticsTrackKey()) return;
-    analyticsSessionId = result.sessionId || "";
-    analyticsLastHeartbeatAt = performance.now();
-  } catch {
-    // Воспроизведение не должно зависеть от доступности статистики.
-  } finally {
-    if (generation === analyticsGeneration) analyticsRequestInFlight = false;
-  }
-}
-
-async function sendListeningProgress(force = false) {
-  if (!ANALYTICS_ENDPOINT || !analyticsSessionId || analyticsCounted || analyticsRequestInFlight) return;
-  const now = performance.now();
-  if (!force && now - analyticsLastHeartbeatAt < 9000) return;
-
-  const generation = analyticsGeneration;
-  const nextSequence = analyticsSequence + 1;
-  analyticsRequestInFlight = true;
-  try {
-    const response = await fetch(`${ANALYTICS_ENDPOINT}/api/plays`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "progress",
-        sessionId: analyticsSessionId,
-        clientId: analyticsClientId,
-        sequence: nextSequence,
-        position: Math.max(0, Math.floor(audio.currentTime)),
-      }),
-      keepalive: true,
-    });
-    const result = await response.json();
-    if (response.status === 409 && Number.isInteger(result.sequence)) {
-      analyticsSequence = result.sequence;
-      analyticsLastHeartbeatAt = now;
-      return;
-    }
-    if (!response.ok) throw new Error(`Analytics ${response.status}`);
-    if (generation !== analyticsGeneration) return;
-    analyticsSequence = Number.isInteger(result.sequence) ? result.sequence : nextSequence;
-    analyticsLastHeartbeatAt = now;
     analyticsCounted = Boolean(result.counted);
   } catch {
-    // Следующая отметка повторит тот же номер и не создаст двойной счёт.
-    analyticsLastHeartbeatAt = now;
+    // Следующая попытка повторит тот же идентификатор и не создаст двойной счёт.
   } finally {
     if (generation === analyticsGeneration) analyticsRequestInFlight = false;
   }
@@ -869,17 +847,20 @@ artworkModal.addEventListener("click", (event) => {
 });
 
 audio.addEventListener("play", () => {
-  startListeningSession();
+  listeningClockStartedAt = performance.now();
   updateState();
 });
 audio.addEventListener("pause", () => {
-  sendListeningProgress(true);
+  updateListeningClock();
+  listeningClockStartedAt = null;
+  reportQualifiedPlay();
   updateState();
 });
 audio.addEventListener("ended", handleTrackEnd);
 audio.addEventListener("loadedmetadata", () => duration.textContent = formatTime(audio.duration));
 audio.addEventListener("timeupdate", () => {
-  sendListeningProgress();
+  updateListeningClock();
+  reportQualifiedPlay();
   currentTime.textContent = formatTime(audio.currentTime);
   const percent = audio.duration ? (audio.currentTime / audio.duration) * 100 : 0;
   progress.value = percent;
