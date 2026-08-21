@@ -80,6 +80,8 @@ let tracks = albums[currentAlbumIndex].tracks;
 
 const ANALYTICS_ENDPOINT = "https://gma13-listening-stats.gubenkomax13.chatgpt.site";
 const ANALYTICS_CLIENT_KEY = "gma13-listener-id";
+const ALBUM_SHUFFLE_HISTORY_KEY = "gma13-album-shuffle-history";
+const ALBUM_SHUFFLE_HISTORY_LIMIT = 12;
 
 const audio = document.querySelector("#audio");
 const trackList = document.querySelector("#trackList");
@@ -134,6 +136,7 @@ let shufflePosition = 0;
 let albumShuffleOrder = [];
 let albumShufflePosition = 0;
 let albumTrackShuffleBag = [];
+let albumTrackShuffleHistory = [];
 let artworkPreviousFocus = null;
 let likedTracks = {};
 let excludedTracks = {};
@@ -387,11 +390,53 @@ function resetAlbumShuffle(startIndex = currentAlbumIndex) {
   albumShufflePosition = 0;
 }
 
+function albumTrackKey(albumIndex, trackIndex) {
+  const album = albums[albumIndex];
+  const track = album?.tracks[trackIndex];
+  return album && track ? `${album.id}:${track.src}` : "";
+}
+
+function restoreAlbumTrackShuffleHistory() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(ALBUM_SHUFFLE_HISTORY_KEY) || "[]");
+    albumTrackShuffleHistory = Array.isArray(saved)
+      ? saved.filter((key) => typeof key === "string").slice(0, ALBUM_SHUFFLE_HISTORY_LIMIT)
+      : [];
+  } catch {
+    albumTrackShuffleHistory = [];
+    localStorage.removeItem(ALBUM_SHUFFLE_HISTORY_KEY);
+  }
+}
+
+function rememberAlbumShuffleTrack(albumIndex, trackIndex) {
+  const key = albumTrackKey(albumIndex, trackIndex);
+  if (!key) return;
+  albumTrackShuffleHistory = [
+    key,
+    ...albumTrackShuffleHistory.filter((savedKey) => savedKey !== key),
+  ].slice(0, ALBUM_SHUFFLE_HISTORY_LIMIT);
+  albumTrackShuffleBag = albumTrackShuffleBag.filter((target) =>
+    albumTrackKey(target.albumIndex, target.trackIndex) !== key);
+  try {
+    localStorage.setItem(ALBUM_SHUFFLE_HISTORY_KEY, JSON.stringify(albumTrackShuffleHistory));
+  } catch {
+    // История рандома сохраняется только когда браузер разрешает локальное хранилище.
+  }
+}
+
 function resetAlbumTrackShuffle() {
-  albumTrackShuffleBag = albums.flatMap((album, albumIndex) =>
+  const candidates = albums.flatMap((album, albumIndex) =>
     playableIndexes(albumIndex)
       .filter((trackIndex) => albumIndex !== loadedAlbumIndex || trackIndex !== loadedIndex)
       .map((trackIndex) => ({ albumIndex, trackIndex })));
+  let historyDepth = albumTrackShuffleHistory.length;
+  do {
+    const protectedKeys = new Set(albumTrackShuffleHistory.slice(0, historyDepth));
+    albumTrackShuffleBag = candidates.filter((target) =>
+      !protectedKeys.has(albumTrackKey(target.albumIndex, target.trackIndex)));
+    if (albumTrackShuffleBag.some((target) => target.albumIndex !== loadedAlbumIndex)) break;
+    historyDepth -= 1;
+  } while (historyDepth >= 0);
   for (let i = albumTrackShuffleBag.length - 1; i > 0; i -= 1) {
     const j = Math.floor(Math.random() * (i + 1));
     [albumTrackShuffleBag[i], albumTrackShuffleBag[j]] = [albumTrackShuffleBag[j], albumTrackShuffleBag[i]];
@@ -445,6 +490,7 @@ function restoreModes() {
   }
   if (shuffleTrackEnabled) resetShuffle(currentIndex);
   if (shuffleAlbumEnabled) {
+    rememberAlbumShuffleTrack(loadedAlbumIndex, loadedIndex);
     resetAlbumShuffle(currentAlbumIndex);
     resetAlbumTrackShuffle();
   }
@@ -741,9 +787,11 @@ function loadTrack(index, autoplay = false) {
   if (isExcluded(currentIndex)) return false;
   const track = tracks[currentIndex];
 
-  if (loadedAlbumIndex !== currentAlbumIndex || loadedIndex !== currentIndex) {
+  const trackChanged = loadedAlbumIndex !== currentAlbumIndex || loadedIndex !== currentIndex;
+  if (trackChanged) {
     loadedAlbumIndex = currentAlbumIndex;
     loadedIndex = currentIndex;
+    if (shuffleAlbumEnabled) rememberAlbumShuffleTrack(loadedAlbumIndex, loadedIndex);
     resetListeningAnalytics();
     audio.src = track.src;
     setImageSource(playerCover, trackThumb(track, albums[loadedAlbumIndex]), albums[loadedAlbumIndex].cover);
@@ -759,7 +807,7 @@ function loadTrack(index, autoplay = false) {
 
   updateRows();
   updateLikes();
-  queueUpcomingTrack();
+  queueUpcomingTrack(trackChanged);
   if (autoplay) audio.play().catch(() => updateState());
   return true;
 }
@@ -936,6 +984,7 @@ shuffleTrack.addEventListener("click", () => {
 shuffleAlbum.addEventListener("click", () => {
   shuffleAlbumEnabled = !shuffleAlbumEnabled;
   if (shuffleAlbumEnabled) {
+    rememberAlbumShuffleTrack(loadedAlbumIndex, loadedIndex);
     resetAlbumShuffle(currentAlbumIndex);
     resetAlbumTrackShuffle();
   } else {
@@ -1067,6 +1116,7 @@ async function loadAlbumsData() {
 
 async function startPlayer() {
   await loadAlbumsData();
+  restoreAlbumTrackShuffleHistory();
   currentAlbumIndex = Math.floor(Math.random() * albums.length);
   tracks = albums[currentAlbumIndex].tracks;
   currentIndex = 0;
