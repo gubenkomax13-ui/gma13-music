@@ -289,5 +289,31 @@ window.albumData = [
         "duration": 188
       }
     ]
+  },
+  {
+    "id": "jazzresheno",
+    "eyebrow": "Jazz",
+    "title": "Jazzрешено",
+    "subtitle": "",
+    "artist": "GMA13",
+    "note": "Тринадцать композиций.",
+    "heading": "Jazzрешено",
+    "cover": "assets/jazzрешено/cover.png",
+    "preview": "assets/jazzрешено/cover.png",
+    "tracks": [
+      { "title": "Os", "element": "Jazz", "src": "assets/jazzрешено/Track-01.mp3", "thumb": "assets/jazzрешено/cover.png", "cover": "assets/jazzрешено/cover.png", "duration": 275 },
+      { "title": "2005", "element": "Jazz", "src": "assets/jazzрешено/Track-02.mp3", "thumb": "assets/jazzрешено/cover.png", "cover": "assets/jazzрешено/cover.png", "duration": 274 },
+      { "title": "Ether", "element": "Jazz", "src": "assets/jazzрешено/Track-03.mp3", "thumb": "assets/jazzрешено/cover.png", "cover": "assets/jazzрешено/cover.png", "duration": 299 },
+      { "title": "Obman", "element": "Jazz", "src": "assets/jazzрешено/Track-04.mp3", "thumb": "assets/jazzрешено/cover.png", "cover": "assets/jazzрешено/cover.png", "duration": 363 },
+      { "title": "Sunday", "element": "Jazz", "src": "assets/jazzрешено/Track-05.mp3", "thumb": "assets/jazzрешено/cover.png", "cover": "assets/jazzрешено/cover.png", "duration": 310 },
+      { "title": "Tin", "element": "Jazz", "src": "assets/jazzрешено/Track-06.mp3", "thumb": "assets/jazzрешено/cover.png", "cover": "assets/jazzрешено/cover.png", "duration": 289 },
+      { "title": "F", "element": "Jazz", "src": "assets/jazzрешено/Track-07.mp3", "thumb": "assets/jazzрешено/cover.png", "cover": "assets/jazzрешено/cover.png", "duration": 232 },
+      { "title": "Simf (ver.1)", "element": "Jazz", "src": "assets/jazzрешено/Track-08.mp3", "thumb": "assets/jazzрешено/cover.png", "cover": "assets/jazzрешено/cover.png", "duration": 281 },
+      { "title": "Dusk", "element": "Jazz", "src": "assets/jazzрешено/Track-09.mp3", "thumb": "assets/jazzрешено/cover.png", "cover": "assets/jazzрешено/cover.png", "duration": 274 },
+      { "title": "NO2", "element": "Jazz", "src": "assets/jazzрешено/Track-10.mp3", "thumb": "assets/jazzрешено/cover.png", "cover": "assets/jazzрешено/cover.png", "duration": 194 },
+      { "title": "RS", "element": "Jazz", "src": "assets/jazzрешено/Track-11.mp3", "thumb": "assets/jazzрешено/cover.png", "cover": "assets/jazzрешено/cover.png", "duration": 199 },
+      { "title": "Simf (ver.2)", "element": "Jazz", "src": "assets/jazzрешено/Track-12.mp3", "thumb": "assets/jazzрешено/cover.png", "cover": "assets/jazzрешено/cover.png", "duration": 205 },
+      { "title": "The past", "element": "Jazz", "src": "assets/jazzрешено/Track-13.mp3", "thumb": "assets/jazzрешено/cover.png", "cover": "assets/jazzрешено/cover.png", "duration": 274 }
+    ]
   }
 ];

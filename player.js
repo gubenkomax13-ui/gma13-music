@@ -562,7 +562,10 @@ function updateAlbumView() {
   albumTitleMain.innerHTML = escapeHtml(album.title).replace(/\n/g, "<br />");
   albumTitleSub.textContent = album.subtitle;
   albumTitleSub.hidden = !album.subtitle;
-  document.body.classList.toggle("long-album-title", albumFullTitle(album).length > 18);
+  const hasLongWord = albumFullTitle(album)
+    .split(/\s+/)
+    .some((word) => word.length >= 10);
+  document.body.classList.toggle("long-album-title", albumFullTitle(album).length > 18 || hasLongWord);
   artistName.textContent = album.artist;
   albumNote.innerHTML = album.note;
   trackHeading.textContent = album.heading;
