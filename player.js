@@ -123,6 +123,7 @@ const totalDuration = document.querySelector("#totalDuration");
 const durationSeparator = document.querySelector("#durationSeparator");
 const trackCount = document.querySelector("#trackCount");
 const trackCountLabel = document.querySelector("#trackCountLabel");
+const albumPermalink = document.querySelector("#albumPermalink");
 
 let currentIndex = 0;
 let loadedAlbumIndex = -1;
@@ -537,23 +538,83 @@ function trackWord(count) {
   return "композиций";
 }
 
+function albumIndexFromUrl() {
+  const albumId = new URLSearchParams(location.search).get("album");
+  if (!albumId) return -1;
+  return albums.findIndex((album) => album.id === albumId);
+}
+
+function trackIndexFromUrl(albumIndex) {
+  const value = Number(new URLSearchParams(location.search).get("track"));
+  const index = value - 1;
+  return Number.isInteger(index) && index >= 0 && index < albums[albumIndex].tracks.length
+    ? index
+    : -1;
+}
+
+function albumUrl(albumIndex = currentAlbumIndex, trackIndex = null) {
+  const url = new URL(location.href);
+  url.search = "";
+  url.hash = "";
+  url.searchParams.set("album", albums[albumIndex].id);
+  if (Number.isInteger(trackIndex)) url.searchParams.set("track", String(trackIndex + 1));
+  else url.searchParams.delete("track");
+  return url;
+}
+
+function syncAlbumUrl(trackIndex = null) {
+  if (location.protocol !== "http:" && location.protocol !== "https:") return;
+  const album = albums[currentAlbumIndex];
+  if (!album) return;
+  const url = albumUrl(currentAlbumIndex, trackIndex);
+  if (url.href === location.href) return;
+  history.replaceState({ albumId: album.id }, "", url);
+}
+
+async function copyTrackLink(index, button) {
+  const url = albumUrl(currentAlbumIndex, index).href;
+  try {
+    await navigator.clipboard.writeText(url);
+  } catch {
+    const input = document.createElement("textarea");
+    input.value = url;
+    input.style.position = "fixed";
+    input.style.opacity = "0";
+    document.body.append(input);
+    input.select();
+    document.execCommand("copy");
+    input.remove();
+  }
+  button.classList.add("is-copied");
+  button.setAttribute("aria-label", `Ссылка на ${tracks[index].title} скопирована`);
+  button.title = "Ссылка скопирована";
+  window.setTimeout(() => {
+    button.classList.remove("is-copied");
+    button.setAttribute("aria-label", `Скопировать ссылку на ${tracks[index].title}`);
+    button.title = "Скопировать ссылку";
+  }, 1800);
+}
+
 function renderAlbumSwitcher() {
   albumSwitcher.innerHTML = albums.map((album, index) => `
-    <button class="album-tab" type="button" data-album-index="${index}" aria-pressed="${index === currentAlbumIndex}">
+    <a class="album-tab" href="${albumUrl(index).href}" data-album-index="${index}" aria-current="${index === currentAlbumIndex ? "page" : "false"}">
       <img src="${album.preview}" alt="" loading="lazy" />
       <span>${albumFullTitle(album)}</span>
-    </button>
+    </a>
   `).join("");
 
   albumSwitcher.addEventListener("click", (event) => {
     const button = event.target.closest("[data-album-index]");
     if (!button) return;
+    event.preventDefault();
     setAlbum(Number(button.dataset.albumIndex));
+    syncAlbumUrl();
   });
 }
 
 function updateAlbumView() {
   const album = albums[currentAlbumIndex];
+  syncAlbumUrl();
   albumCover.src = album.preview;
   albumCover.alt = `Обложка альбома ${albumFullTitle(album)}`;
   coverIndex.textContent = `${String(currentAlbumIndex + 1).padStart(2, "0")} / ${String(albums.length).padStart(2, "0")}`;
@@ -568,6 +629,8 @@ function updateAlbumView() {
   document.body.classList.toggle("long-album-title", albumFullTitle(album).length > 18 || hasLongWord);
   artistName.textContent = album.artist;
   albumNote.innerHTML = album.note;
+  albumPermalink.href = albumUrl(currentAlbumIndex).href;
+  albumPermalink.setAttribute("aria-label", `Ссылка на альбом ${albumFullTitle(album)}`);
   trackHeading.textContent = album.heading;
   footerAlbum.textContent = albumFullTitle(album);
   trackCount.textContent = String(tracks.length);
@@ -581,7 +644,7 @@ function updateAlbumView() {
   albumSwitcher.querySelectorAll("[data-album-index]").forEach((button, index) => {
     const active = index === currentAlbumIndex;
     button.classList.toggle("active", active);
-    button.setAttribute("aria-pressed", String(active));
+    button.setAttribute("aria-current", active ? "page" : "false");
   });
 }
 
@@ -620,6 +683,9 @@ function renderTracks() {
       <button class="control-button track-exclude" type="button" data-exclude-index="${index}" aria-label="Исключить из проигрывания ${track.title}" aria-pressed="false" title="Исключить из проигрывания">
         <span aria-hidden="true">−</span>
       </button>
+      <button class="control-button track-share" type="button" data-share-index="${index}" aria-label="Скопировать ссылку на ${track.title}" title="Скопировать ссылку">
+        <span class="control-glyph glyph-share" aria-hidden="true"></span>
+      </button>
       <button class="control-button like-button track-like" type="button" data-like-index="${index}" aria-label="Like ${track.title}" aria-pressed="false" title="Like">
         <span class="control-glyph glyph-heart" aria-hidden="true"></span>
         <span class="like-count">0</span>
@@ -642,6 +708,12 @@ function renderTracks() {
         return;
       }
 
+      const shareButton = event.target.closest("[data-share-index]");
+      if (shareButton) {
+        copyTrackLink(Number(shareButton.dataset.shareIndex), shareButton);
+        return;
+      }
+
       const row = event.target.closest(".track-row");
       if (!row) return;
       const index = Number(row.dataset.index);
@@ -656,7 +728,7 @@ function renderTracks() {
 
     trackList.addEventListener("keydown", (event) => {
       const row = event.target.closest(".track-row");
-      if (!row || event.target.closest("[data-like-index], [data-exclude-index]")) return;
+      if (!row || event.target.closest("[data-like-index], [data-exclude-index], [data-share-index]")) return;
       if (event.code !== "Enter" && event.code !== "Space") return;
       event.preventDefault();
       event.stopPropagation();
@@ -785,10 +857,11 @@ function playQueuedTrack() {
   return true;
 }
 
-function loadTrack(index, autoplay = false) {
+function loadTrack(index, autoplay = false, updateUrl = true) {
   currentIndex = (index + tracks.length) % tracks.length;
   if (isExcluded(currentIndex)) return false;
   const track = tracks[currentIndex];
+  if (updateUrl) syncAlbumUrl(currentIndex);
 
   const trackChanged = loadedAlbumIndex !== currentAlbumIndex || loadedIndex !== currentIndex;
   if (trackChanged) {
@@ -1120,9 +1193,13 @@ async function loadAlbumsData() {
 async function startPlayer() {
   await loadAlbumsData();
   restoreAlbumTrackShuffleHistory();
-  currentAlbumIndex = Math.floor(Math.random() * albums.length);
+  const linkedAlbumIndex = albumIndexFromUrl();
+  currentAlbumIndex = linkedAlbumIndex >= 0
+    ? linkedAlbumIndex
+    : Math.floor(Math.random() * albums.length);
   tracks = albums[currentAlbumIndex].tracks;
-  currentIndex = 0;
+  const linkedTrackIndex = trackIndexFromUrl(currentAlbumIndex);
+  currentIndex = linkedTrackIndex >= 0 ? linkedTrackIndex : 0;
   loadedAlbumIndex = -1;
   loadedIndex = -1;
   restoreLikes();
@@ -1130,7 +1207,10 @@ async function startPlayer() {
   renderAlbumSwitcher();
   updateAlbumView();
   renderTracks();
-  loadTrack(playableIndexes()[0] ?? 0, false);
+  const initialTrackIndex = !isExcluded(currentIndex)
+    ? currentIndex
+    : (playableIndexes()[0] ?? 0);
+  loadTrack(initialTrackIndex, false, linkedTrackIndex >= 0);
   restoreModes();
   discoverDurations();
   setRangeFill(volume, Number(volume.value) * 100);
