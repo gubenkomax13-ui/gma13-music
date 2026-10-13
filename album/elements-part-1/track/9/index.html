@@ -1,0 +1,170 @@
+﻿<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <base href="/gma13-music/" />
+    <meta name="theme-color" content="#171715" />
+    <meta name="description" content="Pu — композиция из альбома «Elements · Part 1». Слушайте онлайн." />
+    <meta property="og:title" content="Pu · Elements · Part 1 · GMA13" />
+    <meta property="og:description" content="Pu — композиция из альбома «Elements · Part 1». Слушайте онлайн." />
+    <meta property="og:image" content="https://gubenkomax13-ui.github.io/gma13-music/assets/elements-part-1/track-09.png" />
+    <meta property="og:type" content="music.song" />
+    <meta property="og:url" content="https://gubenkomax13-ui.github.io/gma13-music/album/elements-part-1/track/9/" />
+    <title>Pu · Elements · Part 1 · GMA13</title>
+    <link rel="icon" href="assets/elements-part-1/cover.png" />
+    <link rel="preload" as="image" href="assets/elements-part-1/previews/cover.webp" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="ambient" aria-hidden="true"></div>
+
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="GMA13 — к началу страницы">
+        <span class="brand-mark"></span>
+        <span>GMA13</span>
+      </a>
+      <span class="edition">Independent release · 2026</span>
+    </header>
+
+    <main id="top">
+      <details class="listener-note">
+        <summary>
+          <span>Обращение к слушателю</span>
+          <i aria-hidden="true"></i>
+        </summary>
+        <div class="listener-note-content">
+          <p>Приветствую вас.</p>
+          <p>Этот музыкальный проект не является коммерческим. Альбомы и треки размещены здесь для свободного прослушивания.</p>
+          <p>Они стали возможны благодаря появлению генеративных музыкальных технологий. При этом сами мелодии, мотивы и идеи возникли гораздо раньше — многие из них были со мной почти двадцать лет, существуя в набросках, мыслях и памяти.</p>
+          <p>Suno стал инструментом, который позволил мне наконец придать этим идеям законченную музыкальную форму и собрать их в альбомы.</p>
+          <p>Для меня это прежде всего возможность дать звучание музыке, которая много лет оставалась только идеей.</p>
+          <p>Спасибо, что слушаете.</p>
+        </div>
+      </details>
+
+      <section class="album-library" aria-labelledby="library-heading">
+        <div>
+          <p class="eyebrow">Альбомы</p>
+          <h2 id="library-heading">Каталог</h2>
+        </div>
+        <div class="album-switcher" id="albumSwitcher" aria-label="Выбор альбома"></div>
+      </section>
+
+      <section class="hero" aria-labelledby="album-title">
+        <div class="cover-wrap">
+          <img class="album-cover" id="albumCover" src="assets/elements-part-1/previews/cover.webp" alt="Обложка альбома Elements Part 1" />
+          <span class="cover-index" id="coverIndex">01 / 02</span>
+        </div>
+
+        <div class="album-copy">
+          <p class="eyebrow" id="albumEyebrow">Rock / Punk / Ska / Blues / Progressive</p>
+          <h1 id="album-title"><span id="albumTitleMain">Elements</span><small id="albumTitleSub">Part 1</small></h1>
+          <p class="artist" id="artistName">GMA13</p>
+          <p class="album-note" id="albumNote">Девять элементов. Девять историй.<br />Один альбом.</p>
+
+          <div class="hero-actions">
+            <button class="primary-button" id="playAlbum" type="button">
+              <span class="button-icon" aria-hidden="true">▶</span>
+              <span>Слушать альбом</span>
+            </button>
+            <span class="album-stats"><b id="trackCount">9</b> <span id="trackCountLabel">композиций</span> <i id="durationSeparator"></i> <span id="totalDuration"></span></span>
+          </div>
+          <a class="album-permalink" id="albumPermalink" href="?album=elements-part-1">
+            <span aria-hidden="true">↗</span>
+            <span>Ссылка на альбом</span>
+          </a>
+        </div>
+      </section>
+
+      <section class="track-section" aria-labelledby="track-heading">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Трек-лист</p>
+            <h2 id="track-heading">Часть первая</h2>
+          </div>
+          <p>Выберите композицию</p>
+        </div>
+
+        <div class="track-list" id="trackList"></div>
+      </section>
+    </main>
+
+    <footer class="page-footer">
+      <p>© 2026 GMA13</p>
+      <p id="footerAlbum">Elements · Part 1</p>
+    </footer>
+
+    <aside class="player" id="player" aria-label="Музыкальный проигрыватель">
+      <div class="now-playing">
+        <button class="artwork-trigger" id="openArtwork" type="button" aria-label="Открыть иллюстрацию текущего трека" title="Открыть иллюстрацию">
+          <img id="playerCover" src="assets/elements-part-1/thumbs/track-01.webp" alt="" />
+        </button>
+        <div>
+          <span id="playerTitle">Ba</span>
+          <small id="playerSubtitle">GMA13 · Barium</small>
+        </div>
+        <button class="control-button like-button player-like" id="playerLike" type="button" aria-label="Лайк текущему треку" aria-pressed="false" title="Лайк">
+          <span class="control-glyph glyph-heart" aria-hidden="true"></span>
+          <span class="like-count">0</span>
+        </button>
+      </div>
+
+      <div class="transport">
+        <div class="transport-buttons">
+          <button class="control-button mode-button" id="shuffleTrack" type="button" aria-label="Рандом треков выключен" aria-pressed="false" title="Рандом треков в альбоме" data-badge="T">
+            <span class="control-glyph glyph-shuffle" aria-hidden="true"><i></i><i></i></span>
+          </button>
+          <button class="control-button album-skip-button" id="previousAlbum" type="button" aria-label="Предыдущий альбом" title="Предыдущий альбом">
+            <span class="control-glyph glyph-previous" aria-hidden="true"></span>
+          </button>
+          <button class="control-button" id="previous" type="button" aria-label="Предыдущая композиция" title="Предыдущая композиция">
+            <span class="control-glyph glyph-previous" aria-hidden="true"></span>
+          </button>
+          <button class="control-button play-button" id="playPause" type="button" aria-label="Воспроизвести" title="Воспроизвести">
+            <span class="control-glyph glyph-play" aria-hidden="true"></span>
+          </button>
+          <button class="control-button" id="next" type="button" aria-label="Следующая композиция" title="Следующая композиция">
+            <span class="control-glyph glyph-next" aria-hidden="true"></span>
+          </button>
+          <button class="control-button album-skip-button" id="nextAlbum" type="button" aria-label="Следующий альбом" title="Следующий альбом">
+            <span class="control-glyph glyph-next" aria-hidden="true"></span>
+          </button>
+          <button class="control-button mode-button" id="repeatOne" type="button" aria-label="Повтор трека выключен" aria-pressed="false" title="Повтор одного трека">
+            <span class="control-glyph glyph-repeat" aria-hidden="true"><b>1</b></span>
+          </button>
+          <button class="control-button mode-button" id="shuffleAlbum" type="button" aria-label="Рандом альбомов выключен" aria-pressed="false" title="Рандом между альбомами" data-badge="A">
+            <span class="control-glyph glyph-shuffle" aria-hidden="true"><i></i><i></i></span>
+          </button>
+        </div>
+        <div class="timeline">
+          <span id="currentTime">0:00</span>
+          <input id="progress" type="range" min="0" max="100" value="0" step="0.1" aria-label="Позиция воспроизведения" />
+          <span id="duration">0:00</span>
+        </div>
+      </div>
+
+      <div class="volume-control">
+        <button class="control-button volume-button" id="mute" type="button" aria-label="Выключить звук" title="Выключить звук">
+          <span class="control-glyph glyph-volume" aria-hidden="true"></span>
+        </button>
+        <input id="volume" type="range" min="0" max="1" value="0.8" step="0.01" aria-label="Громкость" />
+      </div>
+    </aside>
+
+    <div class="artwork-modal" id="artworkModal" role="dialog" aria-modal="true" aria-labelledby="artworkTitle" hidden>
+      <div class="artwork-dialog">
+        <button class="artwork-close" id="closeArtwork" type="button" aria-label="Закрыть иллюстрацию" title="Закрыть"></button>
+        <img id="artworkImage" src="assets/elements-part-1/track-01.png" alt="Иллюстрация трека Ba" />
+        <div class="artwork-caption">
+          <span id="artworkTitle">Ba</span>
+          <small id="artworkSubtitle">GMA13 · Barium</small>
+        </div>
+      </div>
+    </div>
+
+    <audio id="audio" preload="auto"></audio>
+    <script src="albums-data.js"></script>
+    <script src="player.js"></script>
+  </body>
+</html>

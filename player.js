@@ -539,13 +539,15 @@ function trackWord(count) {
 }
 
 function albumIndexFromUrl() {
-  const albumId = new URLSearchParams(location.search).get("album");
+  const pathMatch = location.pathname.match(/\/album\/([^/]+)(?:\/track\/\d+)?\/?$/);
+  const albumId = pathMatch ? decodeURIComponent(pathMatch[1]) : new URLSearchParams(location.search).get("album");
   if (!albumId) return -1;
   return albums.findIndex((album) => album.id === albumId);
 }
 
 function trackIndexFromUrl(albumIndex) {
-  const value = Number(new URLSearchParams(location.search).get("track"));
+  const pathMatch = location.pathname.match(/\/album\/[^/]+\/track\/(\d+)\/?$/);
+  const value = Number(pathMatch ? pathMatch[1] : new URLSearchParams(location.search).get("track"));
   const index = value - 1;
   return Number.isInteger(index) && index >= 0 && index < albums[albumIndex].tracks.length
     ? index
@@ -553,12 +555,19 @@ function trackIndexFromUrl(albumIndex) {
 }
 
 function albumUrl(albumIndex = currentAlbumIndex, trackIndex = null) {
+  if (location.protocol === "http:" || location.protocol === "https:") {
+    const projectRoot = location.pathname.includes("/album/")
+      ? location.pathname.slice(0, location.pathname.indexOf("/album/") + 1)
+      : location.pathname.replace(/[^/]*$/, "");
+    const suffix = Number.isInteger(trackIndex) ? `/track/${trackIndex + 1}/` : "/";
+    return new URL(`${projectRoot}album/${encodeURIComponent(albums[albumIndex].id)}${suffix}`, location.origin);
+  }
+
   const url = new URL(location.href);
   url.search = "";
   url.hash = "";
   url.searchParams.set("album", albums[albumIndex].id);
   if (Number.isInteger(trackIndex)) url.searchParams.set("track", String(trackIndex + 1));
-  else url.searchParams.delete("track");
   return url;
 }
 
