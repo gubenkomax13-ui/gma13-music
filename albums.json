@@ -406,5 +406,122 @@
         "duration": 274
       }
     ]
+  },
+  {
+    "id": "13",
+    "eyebrow": "Abstract",
+    "title": "13",
+    "subtitle": "",
+    "artist": "GMA13",
+    "note": "Тринадцать композиций.",
+    "heading": "13",
+    "cover": "assets/13/Cover.png",
+    "preview": "assets/13/Cover.png",
+    "tracks": [
+      {
+        "title": "Summer Thunder",
+        "element": "Abstract",
+        "src": "assets/13/track-01.mp3",
+        "thumb": "assets/13/track-01.png",
+        "cover": "assets/13/track-01.png",
+        "duration": 226
+      },
+      {
+        "title": "Sunday Core",
+        "element": "Abstract",
+        "src": "assets/13/track-02.mp3",
+        "thumb": "assets/13/track-02.png",
+        "cover": "assets/13/track-02.png",
+        "duration": 257
+      },
+      {
+        "title": "Chiken Rock",
+        "element": "Abstract",
+        "src": "assets/13/track-03.mp3",
+        "thumb": "assets/13/track-03.png",
+        "cover": "assets/13/track-03.png",
+        "duration": 260
+      },
+      {
+        "title": "Vit",
+        "element": "Abstract",
+        "src": "assets/13/track-04.mp3",
+        "thumb": "assets/13/track-04.png",
+        "cover": "assets/13/track-04.png",
+        "duration": 173
+      },
+      {
+        "title": "Xelo",
+        "element": "Abstract",
+        "src": "assets/13/track-05.mp3",
+        "thumb": "assets/13/track-05.png",
+        "cover": "assets/13/track-05.png",
+        "duration": 264
+      },
+      {
+        "title": "Одна ошибка — и ты ошибся!",
+        "element": "Abstract",
+        "src": "assets/13/track-06.mp3",
+        "thumb": "assets/13/track-06.png",
+        "cover": "assets/13/track-06.png",
+        "duration": 329
+      },
+      {
+        "title": "Half-Summer",
+        "element": "Abstract",
+        "src": "assets/13/track-07.mp3",
+        "thumb": "assets/13/track-07.png",
+        "cover": "assets/13/track-07.png",
+        "duration": 234
+      },
+      {
+        "title": "Жить - значит бороться!",
+        "element": "Abstract",
+        "src": "assets/13/track-08.mp3",
+        "thumb": "assets/13/track-08.png",
+        "cover": "assets/13/track-08.png",
+        "duration": 413
+      },
+      {
+        "title": "Trevoga",
+        "element": "Abstract",
+        "src": "assets/13/track-09.mp3",
+        "thumb": "assets/13/track-09.png",
+        "cover": "assets/13/track-09.png",
+        "duration": 213
+      },
+      {
+        "title": "air emocore",
+        "element": "Abstract",
+        "src": "assets/13/track-10.mp3",
+        "thumb": "assets/13/track-10.png",
+        "cover": "assets/13/track-10.png",
+        "duration": 198
+      },
+      {
+        "title": "HF",
+        "element": "Abstract",
+        "src": "assets/13/track-11.mp3",
+        "thumb": "assets/13/track-11.png",
+        "cover": "assets/13/track-11.png",
+        "duration": 235
+      },
+      {
+        "title": "KTN2",
+        "element": "Abstract",
+        "src": "assets/13/track-12.mp3",
+        "thumb": "assets/13/track-12.png",
+        "cover": "assets/13/track-12.png",
+        "duration": 185
+      },
+      {
+        "title": "gb2025",
+        "element": "Abstract",
+        "src": "assets/13/track-13.mp3",
+        "thumb": "assets/13/track-13.png",
+        "cover": "assets/13/track-13.png",
+        "duration": 289
+      }
+    ]
   }
 ]
